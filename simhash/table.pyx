@@ -13,40 +13,44 @@ cdef extern from "simhash-cpp/src/hash.hpp" namespace "Simhash":
         uint64_t operator()(const_char_ptr data, size_t len, uint64_t s)
 
     cdef cppclass Simhash[Hash]:
-        hash_t hash(char *tokens[])
+        hash_t hash(char *tokens[], int weights[])
         hash_t hash_fp(uint64_t *vec, int len)
         hash_t hash_fps(int64_t *vec, int len)
 
 ################################################################################
 # Core. If you're looking for insight into the library, look here
 ################################################################################
-cpdef PyHash(s):
+cpdef PyHash(tokens, weights):
     '''
-    Utility function to return the simhash of a python string
+    Utility function to return the simhash of the features:
+    :features (list of tuples): [(token, weight)]
     '''
     cdef Simhash[jenkins] hasher
-
-    # Tokenize to a Python array
-    tokens = re.split(r'\W+', s, flags=re.UNICODE)
-    utf8 = isinstance(s, unicode)
+    
+    utf8 = True # isinstance(s, unicode)
     ntokens = len(tokens)
 
     # Convert Python array to NULL-terminated C array
     cdef char **ctokens = <char **>malloc((ntokens + 1) * sizeof(char *))
+    cdef int *cweights = <int*>malloc((ntokens + 1) * sizeof(int))
     if ctokens is NULL:
+        raise MemoryError()
+    if cweights is NULL:
         raise MemoryError()
     try:
         for i in xrange(ntokens):
             tokens[i] = ( tokens[i].encode('utf-8') if utf8 else tokens[i] ) + '\0'
             ctokens[i] = tokens[i]
+            cweights[i] = weights[i]
         ctokens[ntokens] = NULL
 
         # Feed C array to C code
-        ret = hasher.hash(ctokens)
+        ret = hasher.hash(ctokens, cweights)
     finally:
 
         # Hand back our stone axe
         free(ctokens)
+        free(cweights)
 
     # AMF...
     return ret
